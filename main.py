@@ -36,12 +36,32 @@ async def verify_webhook(
     
     raise HTTPException(status_code=403, detail="Invalid verification token")
 
+from fastapi import BackgroundTasks
+
+def process_and_reply(sender_phone: str, message_text: str):
+    print(f"Processing message from {sender_phone}: {message_text}")
+    # Process query with RAG pipeline
+    if rag.rag_pipeline:
+        try:
+            answer = rag.rag_pipeline.get_answer(message_text)
+        except Exception as e:
+            print(f"Error generating answer: {e}")
+            answer = "I'm sorry, I encountered an error while processing your request."
+    else:
+        answer = "I'm currently unable to access my knowledge base. Please try again later."
+    
+    # Send reply using the Meta API
+    utils.send_whatsapp_message(sender_phone, answer)
+
 @app.post("/whatsapp")
-async def whatsapp_webhook(request: Request):
+async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     Webhook endpoint to receive incoming messages from WhatsApp.
     """
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception:
+        return {"status": "ok"}
     
     # Check if this is a WhatsApp message event
     if body.get("object") == "whatsapp_business_account":
@@ -58,16 +78,8 @@ async def whatsapp_webhook(request: Request):
                         sender_phone = message.get("from")
                         message_text = message["text"]["body"]
                         
-                        print(f"Received message from {sender_phone}: {message_text}")
-                        
-                        # Process query with RAG pipeline
-                        if rag.rag_pipeline:
-                            answer = rag.rag_pipeline.get_answer(message_text)
-                        else:
-                            answer = "I'm currently unable to access my knowledge base. Please try again later."
-                        
-                        # Send reply using the Meta API
-                        utils.send_whatsapp_message(sender_phone, answer)
+                        # Process in background so we return 200 OK immediately to Meta
+                        background_tasks.add_task(process_and_reply, sender_phone, message_text)
                         
     return {"status": "ok"}
 
