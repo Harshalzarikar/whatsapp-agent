@@ -1,3 +1,8 @@
+# Override sqlite3 for Render compatibility with ChromaDB
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
 from fastapi import FastAPI, Request, HTTPException, Query
 import uvicorn
 import os
