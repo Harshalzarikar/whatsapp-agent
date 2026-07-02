@@ -60,6 +60,8 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     try:
         body = await request.json()
+        print("INCOMING WEBHOOK PAYLOAD:")
+        print(body)
     except Exception:
         return {"status": "ok"}
     
