@@ -19,10 +19,12 @@ app = FastAPI(title="WhatsApp RAG Chatbot")
 
 WHATSAPP_VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN", "my_secure_verify_token")
 
+from fastapi.responses import PlainTextResponse
+
 @app.get("/whatsapp")
 async def verify_webhook(
     hub_mode: str = Query(None, alias="hub.mode"),
-    hub_challenge: int = Query(None, alias="hub.challenge"),
+    hub_challenge: str = Query(None, alias="hub.challenge"),
     hub_verify_token: str = Query(None, alias="hub.verify_token"),
 ):
     """
@@ -30,7 +32,7 @@ async def verify_webhook(
     """
     if hub_mode == "subscribe" and hub_verify_token == WHATSAPP_VERIFY_TOKEN:
         print("Webhook verified successfully!")
-        return hub_challenge
+        return PlainTextResponse(content=str(hub_challenge))
     
     raise HTTPException(status_code=403, detail="Invalid verification token")
 
