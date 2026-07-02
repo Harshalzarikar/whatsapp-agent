@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+requests
+langchain
+langchain-community
+langchain-core
+langchain-groq
+langchain-google-genai
+chromadb
+requests
+python-dotenv
+datasets
+langchain-text-splitters
