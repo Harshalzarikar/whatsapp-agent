@@ -11,3 +11,4 @@ python-dotenv
 datasets
 langchain-text-splitters
 pysqlite3-binary
+pypdf

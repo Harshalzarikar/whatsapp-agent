@@ -1,5 +1,6 @@
 import os
 import requests
+import base64
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -51,3 +52,66 @@ def send_whatsapp_message(to_number: str, message_body: str, phone_number_id: st
         if e.response is not None:
             print(f"Response data: {e.response.text}")
         return False
+
+def download_waapi_media(message_obj: dict, filename: str = "temp_document.pdf") -> str:
+    """Downloads media from a Waapi message object and saves it to a file."""
+    if not WAAPI_INSTANCE_ID or not WAAPI_API_TOKEN:
+        print("Error: Waapi credentials not set in .env", flush=True)
+        return None
+        
+    url = f"https://waapi.app/api/v1/instances/{WAAPI_INSTANCE_ID}/client/action/download-media"
+    
+    headers = {
+        "Authorization": f"Bearer {WAAPI_API_TOKEN}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    
+    data = {
+        "message": message_obj
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+        
+        resp_data = response.json()
+        
+        # Check if the response contains base64 data
+        if "data" in resp_data and "data" in resp_data["data"]:
+            base64_data = resp_data["data"]["data"]
+        else:
+            # Maybe it returns base64 string directly or under another key
+            base64_data = resp_data.get("data", "")
+            if isinstance(base64_data, dict):
+                base64_data = base64_data.get("data", "") # Correct fallback
+                
+            if not base64_data and "base64" in resp_data:
+                base64_data = resp_data["base64"]
+                
+        if not base64_data:
+            print(f"Could not extract base64 data from response: {str(resp_data)[:200]}")
+            return None
+            
+        # Decode base64
+        # Remove data URI scheme if present (e.g. data:application/pdf;base64,...)
+        if isinstance(base64_data, str) and base64_data.startswith("data:"):
+            base64_data = base64_data.split(",")[1]
+            
+        file_bytes = base64.b64decode(base64_data)
+        
+        with open(filename, "wb") as f:
+            f.write(file_bytes)
+            
+        print(f"Media downloaded and saved to {filename}")
+        return filename
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to download media: {e}")
+        if e.response is not None:
+            print(f"Response data: {e.response.text}")
+        return None
+    except Exception as e:
+        print(f"Error processing downloaded media: {e}")
+        return None
+

@@ -5,6 +5,8 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -70,6 +72,34 @@ class RAGPipeline:
         except Exception as e:
             print(f"Error generating answer: {e}")
             return "I apologize, but I encountered an error while trying to process your request."
+
+    def ingest_pdf(self, file_path: str) -> bool:
+        """Loads a PDF, extracts text, splits it, and adds it to the ChromaDB."""
+        try:
+            print(f"Loading PDF from {file_path}...")
+            loader = PyPDFLoader(file_path)
+            documents = loader.load()
+            
+            if not documents:
+                print("No text found in PDF.")
+                return False
+                
+            print("Splitting text into chunks...")
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000,
+                chunk_overlap=200,
+                length_function=len,
+            )
+            chunks = text_splitter.split_documents(documents)
+            
+            print(f"Adding {len(chunks)} chunks to vector store...")
+            self.vector_store.add_documents(chunks)
+            print("PDF successfully ingested!")
+            
+            return True
+        except Exception as e:
+            print(f"Error ingesting PDF: {e}")
+            return False
 
 # Initialize a global instance (singleton pattern for fast API access)
 try:

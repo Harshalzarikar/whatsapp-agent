@@ -32,6 +32,39 @@ def process_and_reply(sender_phone: str, message_text: str):
     # Send reply using the Waapi API
     utils.send_whatsapp_message(sender_phone, answer)
 
+def process_and_ingest_document(sender_phone: str, message: dict):
+    print(f"Processing document from {sender_phone}...", flush=True)
+    
+    # Notify user we started processing
+    utils.send_whatsapp_message(sender_phone, "Received your PDF. Please wait while I read and memorize it...")
+    
+    try:
+        # Download the PDF
+        file_path = utils.download_waapi_media(message, filename=f"temp_upload_{sender_phone.replace('@c.us', '')}.pdf")
+        
+        if not file_path:
+            utils.send_whatsapp_message(sender_phone, "I'm sorry, I couldn't download the document. Please ensure it's a valid PDF.")
+            return
+            
+        # Ingest into ChromaDB
+        if rag.rag_pipeline:
+            success = rag.rag_pipeline.ingest_pdf(file_path)
+            
+            # Clean up the temp file
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                
+            if success:
+                utils.send_whatsapp_message(sender_phone, "Success! I have memorized the document. You can now ask me questions about it!")
+            else:
+                utils.send_whatsapp_message(sender_phone, "I couldn't extract text from the PDF. It might be scanned or empty.")
+        else:
+            utils.send_whatsapp_message(sender_phone, "I'm currently unable to access my knowledge base. Please try again later.")
+            
+    except Exception as e:
+        print(f"Error processing document: {e}", flush=True)
+        utils.send_whatsapp_message(sender_phone, "I encountered an error while processing your document.")
+
 @app.post("/whatsapp")
 async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     """
@@ -49,14 +82,21 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
         data = body.get("data", {})
         message = data.get("message", {})
         
-        # Ensure it's a text message or a chat message
-        if message.get("type") in ["chat", "text"] and not message.get("fromMe"):
+        # Ensure it's not sent by the bot itself
+        if not message.get("fromMe"):
             sender_phone = message.get("from")
-            message_text = message.get("body")
+            msg_type = message.get("type")
             
-            if sender_phone and message_text:
-                # Process in background so we return 200 OK immediately to Waapi
-                background_tasks.add_task(process_and_reply, sender_phone, message_text)
+            if msg_type in ["chat", "text"]:
+                message_text = message.get("body")
+                if sender_phone and message_text:
+                    # Process in background so we return 200 OK immediately to Waapi
+                    background_tasks.add_task(process_and_reply, sender_phone, message_text)
+            
+            elif msg_type == "document":
+                # Ensure it's a PDF if possible (Waapi might not pass mimetype here but usually does in media metadata)
+                if sender_phone:
+                    background_tasks.add_task(process_and_ingest_document, sender_phone, message)
                         
     return {"status": "ok"}
 
