@@ -26,6 +26,15 @@ def send_whatsapp_message(to_number: str, message_body: str, phone_number_id: st
     chat_id = to_number.replace("+", "")
     if not chat_id.endswith("@c.us"):
         chat_id = f"{chat_id}@c.us"
+        
+    # --- WAAPI TRIAL OVERRIDE ---
+    # Force all replies to go to the registered trial phone number
+    # This prevents the 403 Forbidden error when replying to other numbers during trial
+    TRIAL_PHONE = "919284360901@c.us"
+    if chat_id != TRIAL_PHONE:
+        print(f"Waapi Trial Mode: Redirecting reply from {chat_id} to {TRIAL_PHONE}", flush=True)
+        message_body = f"[Redirected reply to {chat_id}]\n\n{message_body}"
+        chat_id = TRIAL_PHONE
     
     data = {
         "chatId": chat_id,
