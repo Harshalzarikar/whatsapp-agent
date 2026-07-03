@@ -38,20 +38,20 @@ async def verify_webhook(
 
 from fastapi import BackgroundTasks
 
-def process_and_reply(sender_phone: str, message_text: str):
-    print(f"Processing message from {sender_phone}: {message_text}")
+def process_and_reply(sender_phone: str, message_text: str, phone_number_id: str):
+    print(f"Processing message from {sender_phone} to {phone_number_id}: {message_text}", flush=True)
     # Process query with RAG pipeline
     if rag.rag_pipeline:
         try:
             answer = rag.rag_pipeline.get_answer(message_text)
         except Exception as e:
-            print(f"Error generating answer: {e}")
+            print(f"Error generating answer: {e}", flush=True)
             answer = "I'm sorry, I encountered an error while processing your request."
     else:
         answer = "I'm currently unable to access my knowledge base. Please try again later."
     
     # Send reply using the Meta API
-    utils.send_whatsapp_message(sender_phone, answer)
+    utils.send_whatsapp_message(sender_phone, answer, phone_number_id)
 
 @app.post("/whatsapp")
 async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
@@ -80,8 +80,11 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         sender_phone = message.get("from")
                         message_text = message["text"]["body"]
                         
+                        metadata = value.get("metadata", {})
+                        phone_number_id = metadata.get("phone_number_id")
+                        
                         # Process in background so we return 200 OK immediately to Meta
-                        background_tasks.add_task(process_and_reply, sender_phone, message_text)
+                        background_tasks.add_task(process_and_reply, sender_phone, message_text, phone_number_id)
                         
     return {"status": "ok"}
 
