@@ -4,43 +4,38 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Meta WhatsApp Cloud API credentials
-WHATSAPP_API_TOKEN = os.environ.get('WHATSAPP_API_TOKEN')
+# Waapi credentials
+WAAPI_INSTANCE_ID = os.environ.get('WAAPI_INSTANCE_ID')
+WAAPI_API_TOKEN = os.environ.get('WAAPI_API_TOKEN')
 
 def send_whatsapp_message(to_number: str, message_body: str, phone_number_id: str = None):
-    """Sends a WhatsApp message using the Meta WhatsApp Cloud API."""
-    if not WHATSAPP_API_TOKEN:
-        print("Error: WhatsApp API token not set in .env", flush=True)
+    """Sends a WhatsApp message using the Waapi API."""
+    if not WAAPI_INSTANCE_ID or not WAAPI_API_TOKEN:
+        print("Error: Waapi credentials not set in .env", flush=True)
         return False
         
-    # Fallback to env variable if not provided dynamically
-    if not phone_number_id:
-        phone_number_id = os.environ.get('WHATSAPP_PHONE_NUMBER_ID')
-        
-    if not phone_number_id:
-        print("Error: WhatsApp Phone Number ID not provided", flush=True)
-        return False
-        
-    url = f"https://graph.facebook.com/v19.0/{phone_number_id}/messages"
+    url = f"https://waapi.app/api/v1/instances/{WAAPI_INSTANCE_ID}/client/action/send-message"
     
     headers = {
-        "Authorization": f"Bearer {WHATSAPP_API_TOKEN}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {WAAPI_API_TOKEN}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
     }
     
+    # Format chat_id for waapi (remove any + sign)
+    chat_id = to_number.replace("+", "")
+    if not chat_id.endswith("@c.us"):
+        chat_id = f"{chat_id}@c.us"
+    
     data = {
-        "messaging_product": "whatsapp",
-        "to": to_number,
-        "type": "text",
-        "text": {
-            "body": message_body
-        }
+        "chatId": chat_id,
+        "message": message_body
     }
     
     try:
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()
-        print(f"Message sent successfully to {to_number}")
+        print(f"Message sent successfully to {chat_id}")
         return True
     except requests.exceptions.RequestException as e:
         print(f"Failed to send message: {e}")

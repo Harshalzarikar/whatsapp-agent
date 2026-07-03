@@ -6,7 +6,7 @@ try:
 except ImportError:
     pass
 
-from fastapi import FastAPI, Request, HTTPException, Query
+from fastapi import FastAPI, Request, BackgroundTasks
 import uvicorn
 import os
 import rag
@@ -17,29 +17,8 @@ load_dotenv()
 
 app = FastAPI(title="WhatsApp RAG Chatbot")
 
-WHATSAPP_VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN", "my_secure_verify_token")
-
-from fastapi.responses import PlainTextResponse
-
-@app.get("/whatsapp")
-async def verify_webhook(
-    hub_mode: str = Query(None, alias="hub.mode"),
-    hub_challenge: str = Query(None, alias="hub.challenge"),
-    hub_verify_token: str = Query(None, alias="hub.verify_token"),
-):
-    """
-    Webhook verification endpoint for Meta WhatsApp Cloud API.
-    """
-    if hub_mode == "subscribe" and hub_verify_token == WHATSAPP_VERIFY_TOKEN:
-        print("Webhook verified successfully!")
-        return PlainTextResponse(content=str(hub_challenge))
-    
-    raise HTTPException(status_code=403, detail="Invalid verification token")
-
-from fastapi import BackgroundTasks
-
-def process_and_reply(sender_phone: str, message_text: str, phone_number_id: str):
-    print(f"Processing message from {sender_phone} to {phone_number_id}: {message_text}", flush=True)
+def process_and_reply(sender_phone: str, message_text: str):
+    print(f"Processing message from {sender_phone}: {message_text}", flush=True)
     # Process query with RAG pipeline
     if rag.rag_pipeline:
         try:
@@ -50,41 +29,34 @@ def process_and_reply(sender_phone: str, message_text: str, phone_number_id: str
     else:
         answer = "I'm currently unable to access my knowledge base. Please try again later."
     
-    # Send reply using the Meta API
-    utils.send_whatsapp_message(sender_phone, answer, phone_number_id)
+    # Send reply using the Waapi API
+    utils.send_whatsapp_message(sender_phone, answer)
 
 @app.post("/whatsapp")
 async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     """
-    Webhook endpoint to receive incoming messages from WhatsApp.
+    Webhook endpoint to receive incoming messages from Waapi.
     """
     try:
         body = await request.json()
-        print("INCOMING WEBHOOK PAYLOAD:")
+        print("INCOMING WAAPI WEBHOOK PAYLOAD:")
         print(body)
     except Exception:
         return {"status": "ok"}
     
-    # Check if this is a WhatsApp message event
-    if body.get("object") == "whatsapp_business_account":
-        for entry in body.get("entry", []):
-            for change in entry.get("changes", []):
-                value = change.get("value", {})
-                
-                # Check if there are messages
-                if "messages" in value and value["messages"]:
-                    message = value["messages"][0]
-                    
-                    # Only process text messages
-                    if message.get("type") == "text":
-                        sender_phone = message.get("from")
-                        message_text = message["text"]["body"]
-                        
-                        metadata = value.get("metadata", {})
-                        phone_number_id = metadata.get("phone_number_id")
-                        
-                        # Process in background so we return 200 OK immediately to Meta
-                        background_tasks.add_task(process_and_reply, sender_phone, message_text, phone_number_id)
+    # Check if this is a message event from Waapi
+    if body.get("event") == "message":
+        data = body.get("data", {})
+        message = data.get("message", {})
+        
+        # Ensure it's a text message or a chat message
+        if message.get("type") in ["chat", "text"] and not message.get("fromMe"):
+            sender_phone = message.get("from")
+            message_text = message.get("body")
+            
+            if sender_phone and message_text:
+                # Process in background so we return 200 OK immediately to Waapi
+                background_tasks.add_task(process_and_reply, sender_phone, message_text)
                         
     return {"status": "ok"}
 
